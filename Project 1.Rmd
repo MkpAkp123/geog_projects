@@ -1,0 +1,249 @@
+---
+title: "Project 1"
+author: "Arnav Pandey"
+date: "2026-09-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Load Libraries and Data
+
+```{r load-libraries, message=FALSE, error=FALSE, warnin=FALSE}
+# Load our libraries
+library(tidyverse)
+library(sf)
+library(tmap)
+```
+
+```{r load-data}
+# Download NC counties Demographic data
+ncCounties <- read_sf("https://drive.google.com/uc?export=download&id=1Ks38Gmdlp58GBhOgb6FBmx8tIAfu0QDw")
+```
+
+```{r}
+# Change the map to the NC State Plane Projection
+ncCountiesProj <- st_transform(ncCounties, "EPSG:32119")
+st_crs(ncCountiesProj)
+```
+
+## 2. Practice Maps
+
+```{r}
+ncCounties|>
+  tm_shape() +
+  tm_polygons("popE")
+```
+
+```{r}
+pop2020 <- ncCountiesProj |>
+  select(popE, geometry)|>
+  # Area for each county
+  mutate(area=st_area(ncCountiesProj))|>
+  # Calculate population density
+  mutate(pop.dens=units::set_units(popE/area,"1/km^2"))
+
+```
+
+```{r}
+pop2020 |>
+  tm_shape()+
+  tm_polygons("pop.dens")
+```
+
+```{r}
+# Population density map with equal intervals
+equal.pop <- pop2020 |> # Map as an object called equal.pop
+  tm_shape()+
+  tm_polygons(fill = "pop.dens",
+              # Use a blue color palette and equal interval scale
+              fill.scale=tm_scale_intervals(style = "equal", values = "brewer.blues"),
+              # Create a legend
+              fill.legend = tm_legend(title=paste("North Carolina\n", "Population Density 2020\n", "\n(persons/sq. km)\n","(Equal Interval)\n"), 
+                                      position = tm_pos_out("right","center"),frame=FALSE))+
+  # Remove Frame From Map
+  tm_layout(frame = FALSE,
+            outer.margins = 0)
+# Print the map
+equal.pop
+  
+              
+              
+              
+              
+              
+              
+              
+
+```
+
+```{r}
+# Population density map with quantile intervals
+quantile.pop <- pop2020 |> # Map as an object called quantile.pop
+  tm_shape()+
+  tm_polygons(fill = "pop.dens",
+              # Use a purple color palette and quantile scale
+              fill.scale=tm_scale_intervals(style = "quantile", values = "brewer.purples"),
+              # Create a legend
+              fill.legend = tm_legend(title=paste("North Carolina\n", "Population Density 2020\n", "\n(persons/sq. km)\n","(Quantile)\n"), 
+                                      position = tm_pos_out("right","center"),frame=FALSE))+
+  # Remove Frame From Map
+  tm_layout(frame = FALSE,
+            outer.margins = 0)
+# Print the map
+quantile.pop
+```
+
+```{r}
+# Population density map with jenk scale
+jenks.pop <- pop2020 |> # Map as an object called jenks.pop
+  tm_shape()+
+  tm_polygons(fill = "pop.dens",
+              # Use a green color palette and jenks scale 
+              fill.scale=tm_scale_intervals(style = "jenks", values = "brewer.greens"),
+              # Create a legend
+              fill.legend = tm_legend(title=paste("North Carolina\n", "Population Density 2020\n", "\n(persons/sq. km)\n","(Jenks)\n"), 
+                                      position = tm_pos_out("right","center"),frame=FALSE))+
+  # Remove Frame From Map
+  tm_layout(frame = FALSE,
+            outer.margins = 0)
+# Print the map
+jenks.pop
+```
+
+```{r}
+# Population density map with tmap default (pretty)
+pretty.pop <- pop2020 |> # Map as an object called pretty.pop
+  tm_shape()+
+  tm_polygons(fill = "pop.dens",
+              # Use a red color palette and pretty scale
+              fill.scale=tm_scale_intervals(style = "pretty", values = "brewer.reds"),
+              # Create a legend
+              fill.legend = tm_legend(title=paste("North Carolina\n", "Population Density 2020\n", "\n(persons/sq. km)\n","(Pretty)\n"), 
+                                      position = tm_pos_out("right","center"),frame=FALSE))+
+  # Remove Frame From Map
+  tm_layout(frame = FALSE,
+            outer.margins = 0)
+# Print the map
+pretty.pop
+```
+
+```{r}
+tmap_arrange(pretty.pop,equal.pop,jenks.pop,quantile.pop)
+```
+
+```{r}
+pop2020|>
+  tm_shape()+
+  tm_polygons(fill = "pop.dens",
+    style="jenks",
+    title="Population Density\n2020 (Jenks)\nPeople/sq. km\n",
+    palette = "Purples"
+  )+
+  tm_layout(frame = TRUE,
+           frame.color = "white",
+           outer.margins=0,
+          legend.position = tm_pos_out("right","center"),
+          legend.frame = TRUE,
+          legend.frame.color = "white",
+          title = "Population Density 2020",
+          title.position=tm_pos_out("center","top"))+
+  tm_credits("Arnav Pandey, September 2026\nData: 2020 US Census\nGEOG 215",
+             position = tm_pos_in("left","bottom"))
+```
+
+```{r}
+female <- ncCountiesProj |>
+  select(popE, femaleE) |>
+  mutate(percent.female=femaleE/popE*100)
+```
+
+```{r}
+female |>
+  tm_shape()+
+  tm_polygons(fill="percent.female", style="jenks",palette="Purples",title="Percent Women\n2020 (Jenks)")+
+  tm_layout(frame=FALSE,
+            legend.frame=FALSE,
+            legend.position = tm_pos_out("right","center"),
+            title = "% Women 2020",
+            title.position=tm_pos_out("center","top"))+
+  tm_credits("Arnav Pandey, September 2026\nData: 2020 US Census\nGEOG 215",
+             position = tm_pos_in("left","bottom"))
+```
+
+```{r}
+# Create a diverging map for % Female (above and below 50%)
+female |>
+  tm_shape() +
+  tm_polygons(fill="percent.female",
+              title="% Female\n2020 Census",
+              values="pu_gn_div",
+              midpoint=50,
+              style="equal") +
+  tm_layout(frame = TRUE,
+            frame.color = "white",
+            outer.margins=0,
+            legend.position = tm_pos_out("right", "center"),
+            legend.frame = TRUE,
+            legend.frame.color = "white",
+            title = "% Female 2020 (Diverging)",
+            title.position = tm_pos_out("center", "top")
+  ) +
+  tm_credits("Arnav Pandey, September 2026\nData: 2020 US Census\nGEOG 215",
+             position = tm_pos_in("left", "bottom")
+  )
+```
+
+## 3. My Map
+
+Section 1: Public Transit Map
+
+```{r}
+# Map of public transit usage
+publicTransit <- ncCountiesProj|>
+  select(popE, public.transportationE)|>
+  mutate(percent.pubTransitUse = public.transportationE/popE*100)
+
+PubTransitMap <- publicTransit |>
+  tm_shape()+
+  tm_bubbles(size="percent.pubTransitUse",
+    fill = "green",
+    size.legend = tm_legend("% Public Transit Use")
+  )+
+  tm_layout(frame=FALSE, 
+            legend.frame=TRUE,
+            legend.position = tm_pos_out("right", "bottom"))
+PubTransitMap
+```
+
+Section 2: Median Income Map
+
+```{r}
+# Map of Median Income
+MedianIncomeMap <- ncCountiesProj |>
+  tm_shape()+
+  tm_polygons(fill="median.incomeE",
+              palette="Reds",
+              style="jenks",
+              title="Median Income (Jenks)",
+              )+
+  tm_layout(frame=FALSE,
+            frame.legend=TRUE,
+            legend.position = tm_pos_out("right", "center"))
+MedianIncomeMap
+```
+
+Section 3: Together
+
+```{r}
+MedianIncomeMap+PubTransitMap+
+  tm_layout(
+    legend.stack = "horizontal",
+    title = "Public Transit Use\n Relative to Median Income",
+    title.position = tm_pos_out("center", "top")
+  )+
+  tm_credits("Arnav Pandey\nData: 2020 US Census, GEOG 215",
+             position = tm_pos_in("left", "bottom"))
+```
