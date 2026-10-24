@@ -1,0 +1,280 @@
+---
+title: "Project 2"
+author: "Arnav Pandey"
+date: "2026-10-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Part 4: Loading Libraries and Census Key
+
+```{r}
+library(tmap)
+library(tidyverse)
+library(sf)
+library(tidycensus)
+```
+
+```{r}
+#census_api_key("2a8f1562c656e56a241a10e886f177295907a285", install=TRUE, overwrite=TRUE)
+readRenviron("~/.Renviron")
+Sys.getenv("CENSUS_API_KEY")
+```
+
+## Part 5: Examining Available Data
+
+```{r}
+# download the 2020 variables in the ACS5 data
+vars_acs5 <- load_variables(2020, "acs5", cache=TRUE)
+glimpse(vars_acs5)
+```
+
+## Part 6: Choose Your Census Variables for Mapping and Download Them
+
+### Map 1: Kids aged 6-11 in Poverty
+
+```{r}
+vars_acs5 |>
+  filter(str_detect(str_to_lower(concept), "poverty status in the past 12 months by age")) |>
+  select(name, label, concept)
+```
+
+```{r}
+options(tigris_use_cache = TRUE)
+nc_kids_below_poverty <- get_acs(geography = "county",
+                              variables=c(poverty_kids="B17020_004"),
+                              state="NC",
+                              geometry=TRUE)
+
+nc_kids_above_poverty <- get_acs(geography = "county",
+                   variables=c(non_poverty_kids="B17020_012"),
+                   state="NC",
+                   geometry=FALSE)
+
+```
+
+```{r}
+combined_kids <- left_join(nc_kids_below_poverty,nc_kids_above_poverty, by="GEOID")
+```
+
+```{r}
+combined_kids <- combined_kids |> 
+  mutate(total_kids = estimate.x+estimate.y,
+         pct_kids_poverty=estimate.x/total_kids*100)
+
+combined_kids <- st_transform(combined_kids, "EPSG:32119")
+```
+
+```{r}
+# kids 6-11 in poverty
+map1 <-
+  tm_shape(combined_kids)+
+  tm_polygons(fill = "pct_kids_poverty",
+              fill.scale = tm_scale_intervals(n = 5, style = "jenks"),
+              fill.legend = tm_legend(title = "Kids in Poverty (%)"))+
+  tm_title("Percent of Kids in Poverty (Age 6-11)")+
+  tm_credits("Author: Arnav Pandey\nData Source: US Census Bureau",
+             position = c("left", "bottom"))+
+  tm_layout(frame=FALSE,
+            frame.legend=TRUE,
+            legend.position = tm_pos_out("right", "center"))
+```
+
+```{r}
+map1
+```
+
+### Map 2: Households in Poverty
+
+```{r}
+vars_acs5 |>
+  filter(str_detect(str_to_lower(concept), "poverty status in the past 12 months by household")) |>
+  select(name, label, concept)
+```
+
+```{r}
+options(tigris_use_cache = TRUE)
+nc_households_below_poverty <- get_acs(geography = "county",
+                                 variables=c(poverty_homes="B17017_003"),
+                                 state="NC",
+                                 geometry=TRUE)
+
+nc_households_above_poverty <- get_acs(geography = "county",
+                                       variables=c(poverty_homes="B17017_032"),
+                                       state="NC",
+                                       geometry=FALSE)
+```
+
+```{r}
+combined_households <- 
+  left_join(nc_households_below_poverty,nc_households_above_poverty, by= "GEOID")
+```
+
+```{r}
+combined_households <- combined_households|>
+  mutate(total_households=estimate.x+estimate.y,
+         pct_households_poverty=estimate.x/total_households*100)
+combined_households <- st_transform(combined_households, "EPSG:32119")
+```
+
+```{r}
+map2 <- 
+  tm_shape(combined_households)+
+  tm_polygons(fill = "pct_households_poverty",
+              fill.scale = tm_scale_intervals(n = 5, style = "jenks", values="Purples"),
+              fill.legend = tm_legend(title = "Households in Poverty (%)"))+
+  tm_title("Percent of Family Households in Poverty")+
+  tm_credits("Author: Arnav Pandey\nData Source: US Census Bureau",
+             position = c("left", "bottom"))+
+  tm_layout(frame=FALSE,
+            frame.legend=TRUE,
+            legend.position = tm_pos_out("right", "center"))
+```
+
+```{r}
+map2
+```
+
+### Map 3: SNAP Households
+
+```{r}
+vars_acs5 |>
+  filter(str_detect(str_to_lower(concept), "food stamps")) |>
+  select(name, label, concept)
+```
+
+```{r}
+options(tigris_use_cache = TRUE)
+nc_SNAP_households <- get_acs(geography = "county",
+                                       variables=c(snapHomes="B22002_002"),
+                                       state="NC",
+                                       geometry=TRUE)
+
+nc_noSnap_households <- get_acs(geography = "county",
+                                       variables=c(no_snapHomes="B22002_015"),
+                                       state="NC",
+                                       geometry=FALSE)
+```
+
+```{r}
+combined_SNAP <- 
+  left_join(nc_SNAP_households,nc_noSnap_households, by= "GEOID")
+```
+
+```{r}
+combined_SNAP <- combined_SNAP|>
+  mutate(total_homes=estimate.x+estimate.y,
+         pct_SNAP_homes=estimate.x/total_homes*100)
+combined_SNAP <- st_transform(combined_SNAP, "EPSG:32119")
+```
+
+```{r}
+map3 <- 
+  tm_shape(combined_SNAP)+
+  tm_polygons(fill = "pct_SNAP_homes",
+              fill.scale = tm_scale_intervals(n = 5, style = "jenks", values="Reds"),
+              fill.legend = tm_legend(title = "Households Recieving\n SNAP (%)"))+
+  tm_title("Percent of Households Recieving SNAP")+
+  tm_credits("Author: Arnav Pandey\nData Source: US Census Bureau",
+             position = c("left", "bottom"))+
+  tm_layout(frame=FALSE,
+            frame.legend=TRUE,
+            legend.position = tm_pos_out("right", "center"))
+```
+
+```{r}
+map3
+```
+
+### Map 4: Combination Map
+
+```{r}
+comboSNAP <- st_join(combined_SNAP,combined_households)
+
+comboSNAP <- comboSNAP |>
+  mutate(snapGap = estimate.x.x/estimate.y.x*100)
+```
+
+```{r}
+map4 <-
+  tm_shape(comboSNAP)+
+  tm_polygons(fill = "snapGap",
+              fill.scale = tm_scale_intervals(n = 5, style = "jenks", values="spectral"),
+              fill.legend = tm_legend(title = "Impoverished Households\n Recieving SNAP (%)"))+
+  tm_title("Percent of Impoverished \nHouseholds Recieving SNAP")+
+  tm_credits("Author: Arnav Pandey\nData Source: US Census Bureau",
+             position = c("left", "bottom"))+
+  tm_layout(frame=FALSE,
+            frame.legend=TRUE,
+            legend.position = tm_pos_out("right", "center"))
+
+
+```
+
+```{r}
+map4
+```
+
+## Part 7: Combined Arrangement
+
+```{r}
+tmap_arrange(map1,map2,map3,map4,nrow=2,ncol=2)
+```
+
+```{r}
+mean_center <- function(x, y, w = rep(1, length(x))) {
+  tibble(x = sum(x * w) / sum(w),
+         y = sum(y*w)/sum(w))
+}
+
+standard_distance <- function(x, y, w = rep(1, length(x))) {
+  center <- mean_center(x, y, w)
+  sqrt(sum(w * ((x - center$x)^2 + (y - center$y)^2)) / sum(w))
+}
+```
+
+```{r}
+combined_kids_xy <- combined_kids |>
+  st_centroid()|>
+  st_coordinates()
+
+combined_kids <- combined_kids |>
+  mutate(x = combined_kids_xy[, "X"],
+         y = combined_kids_xy[, "Y"])
+
+sd <- standard_distance(combined_kids$x, combined_kids$y)
+
+center <- mean_center(combined_kids$x,combined_kids$y,w=combined_kids$estimate.x)
+
+poverty_center <- st_as_sf(center,coords=c("x","y"),crs=st_crs(combined_kids))
+poverty_circle <- st_buffer(poverty_center,sd)
+poverty_circle <- poverty_circle |>
+  mutate(Type="Center of Child Poverty")
+```
+
+```{r}
+map5 <- 
+  tm_shape(comboSNAP)+
+  tm_polygons(fill = "snapGap",
+              fill.scale = tm_scale_intervals(n = 5, style = "jenks", values="spectral"),
+              fill.legend = tm_legend(title = "Impoverished Households\n Recieving SNAP (%)"))+
+  tm_credits("Author: Arnav Pandey\nData Source: US Census Bureau",
+             position = c("left", "bottom"))+
+  tm_layout(frame=FALSE,
+            frame.legend=TRUE,
+            legend.position = tm_pos_out("right", "center"))+
+  tm_shape(poverty_circle)+
+  tm_polygons(fill ="Type",
+              col="black",
+              lwd=1,
+              fill_alpha=0.1,
+              fill.legend = tm_legend(title = "Weighted Center"))+
+  tm_title("SNAP Coverage Relative to\n Child Poverty (Ages 6-11)")
+```
+
+```{r}
+map5
+```
